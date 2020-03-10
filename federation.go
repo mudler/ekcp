@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -108,6 +109,17 @@ func (c *EKCPController) Search(clustername string) (KubernetesCluster, error) {
 	return KubernetesCluster{}, errors.New("Cluster not found")
 }
 
+func (c *EKCPController) ImageList(clustername string) ([]string, error) {
+	c.Lock()
+	defer c.Unlock()
+	for _, e := range c.Clusters {
+		if found, _ := e.Exists(clustername); found {
+			return e.ImageList(clustername)
+		}
+	}
+	return []string{}, errors.New("Cluster not found")
+}
+
 func (c *EKCPController) Delete(clustername string) error {
 	c.Lock()
 	defer c.Unlock()
@@ -153,6 +165,7 @@ func FindMin(capacity []int) (index int) {
 	}
 	return
 }
+
 func (c *EKCPServer) generateClient() *http.Client {
 	if c.client == nil {
 		var timeout int
@@ -170,6 +183,22 @@ func (c *EKCPServer) generateClient() *http.Client {
 	}
 
 	return c.client
+}
+
+func (c *EKCPServer) ImageList(cluster string) ([]string, error) {
+
+	response, err := c.generateClient().Get(c.Endpoint + "/api/v1/cluster/" + cluster + "/images/cached")
+	if err != nil {
+		return []string{}, err
+	}
+	defer response.Body.Close()
+	contents, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return []string{}, err
+	}
+	imageList := string(contents)
+
+	return strings.Split(imageList, "\n"), nil
 }
 
 func (c *EKCPServer) Status() (APIResult, error) {
